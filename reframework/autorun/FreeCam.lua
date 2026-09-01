@@ -1,3 +1,22 @@
+--[[ 
+Plan:
+
+1) I would like to move the "SF6 Tools" dropdown menu outside of the "Lua FreeCam v1.9.0" dropdown menu so that its on the same level (in the drowpdown tree) as the current "Lua FreeCam v1.9.0" dropdown menu. 
+2) within: SF6 Tools -> P1 -> Children -> esf012v00_01 -> Materials 
+you want to take out Materials only 
+
+what this means is for all of the "Children" in "P1" and "P2" that have a "Materials" section, I want only the Materials section to exist.
+
+3) I want the "Graphics", "2D Distortion Effect", "Overlapping Fighters", "Frame Rate", "Set Battle Damage", "Set Sweat", "Slow Motion", "Show Character Gizmos", "Show Character Lights Gizmos", "Move Stage", "Move Lights", "Stage Display" all removed. 
+
+To explain why, I want the "SF6 Tools" dropdown to just focus on "P1" and "P2" and the "Materials" associated with the "Children"
+
+4) Once the SF6 Tools is more simplified as specified above, I want to add a dropdown under P1 and P2 right above "Children" that is the CMD file. 
+
+changes by: blue-period on github or watermelanin on discord
+
+]]
+
 --RE Engine Lua Freecam Script v1.9.0
 --by alphaZomega, June 9, 2024
 --Special thanks to praydog and Tedder
