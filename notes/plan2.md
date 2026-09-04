@@ -1,6 +1,6 @@
 I have some lua code that I'm using to build a script to run in street fighter 6 using a framework called reframework. Much of the REframework API is outlined here: "https://refdocs.praydog.com/". And its this API that is used heavily in the original script:
 
-```python
+```lua
 --RE Engine Lua Freecam Script v1.9.0
 --by alphaZomega, June 9, 2024
 --Special thanks to praydog and Tedder
@@ -2557,7 +2557,7 @@ Below is my attempt at making the changes I outlined in the Plan section of the 
 
 
 
-```python
+```lua
 --[[ 
 Plan:
 
