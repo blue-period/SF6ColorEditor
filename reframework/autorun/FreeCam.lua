@@ -644,10 +644,6 @@ local function calculateLookQuaternion(pitch, yaw, roll)
 	return qToReturn:normalized()
 end
 
-local function cs()
-	was_changed = was_changed or changed
-end
-
 local freecam_ui_tree_yaml = [[
 Lua FreeCam v1.9.0:
   Enable FreeCam:
@@ -724,115 +720,396 @@ end
 
 local install_freecam_callbacks = require("callbacks")
 
--- Keep callback dependencies attached to this module so callbacks.lua can update shared state.
-local function freecam_callback_scope_anchor()
-	local capture
-	capture = all_lights
-	capture = apply_shadow_bias
-	capture = attach_detach
-	capture = attached_children
-	capture = cached_lightprobes
-	capture = cam
-	capture = cam_attached
-	capture = cam_gameobj
-	capture = cam_light
-	capture = cam_lights
-	capture = cam_lights_map
-	capture = cam_xform
-	capture = can_rt
-	capture = candela_multi
-	capture = cc_factors
-	capture = cc_on
-	capture = change_player_mat_params
-	capture = change_quality
-	capture = changed
-	capture = constant_fn
-	capture = contrast
-	capture = create_new_cam_light
-	capture = create_or_toggle_cam_light
-	capture = create_resource
-	capture = cs
-	capture = default_settings
-	capture = defaults
-	capture = disable_all_efx
-	capture = disable_all_lights
-	capture = do_force_shadow_bias
-	capture = do_third_person
-	capture = dof_on
-	capture = dof_options
-	capture = dummy
-	capture = dummy_pos
-	capture = dummy_rot
-	capture = dump_settings
-	capture = ev_value
-	capture = filter_on
-	capture = filter_options
-	capture = find_index
-	capture = freecam_changed
-	capture = freecam_light_enabled
-	capture = freecam_on
-	capture = frozenFOV
-	capture = frozen_funcs
-	capture = frozen_scene
-	capture = getC
-	capture = get_mouse_pos
-	capture = graphics_settings_mgr
-	capture = greenscreen_on
-	capture = gs_color
-	capture = hk
-	capture = imgui_data
-	capture = is_constant
-	capture = is_drawing_freecam_ui
-	capture = last_camera_matrix
-	capture = last_mouse_pos
-	capture = last_pos_and_rot
-	capture = light_lookat_fn
-	capture = lightconfig_names
-	capture = lightconfigs_glob
-	capture = lua_get_system_array
-	capture = managed_object_control_panel
-	capture = mount_obj_jname
-	capture = mount_obj_name
-	capture = mounting_fn
-	capture = mouse
-	capture = move_light_by_dummy_independently
-	capture = move_to_light
-	capture = movechars_on
-	capture = movelights_on
-	capture = movestage_on
-	capture = movestage_only_lights
-	capture = orig_render_output_id
-	capture = players
-	capture = pos_before_teleport
-	capture = recurse_def_settings
-	capture = reset_dummy_pos
-	capture = rt_enabled
-	capture = rt_reflections_enabled
-	capture = scene
-	capture = scene_mgr_typedef
-	capture = sceneview
-	capture = setup_stage_attach
-	capture = sf6_data
-	capture = show_cam_lights
-	capture = softbloom_on
-	capture = ssao_on
-	capture = temp_fns
-	capture = temporal_ssao
-	capture = tooltip
-	capture = tps_parent_joint_name
-	capture = use_orthographic
-	capture = vignette_on
-	capture = was_changed
-	capture = zoom
-	return capture
+local freecam_callback_context
+
+-- Callbacks own their UI-facing values; these sync points bridge the existing frame hooks.
+local function create_freecam_callback_context()
+	local context = {
+		state = {
+			cc_factors = cc_factors,
+			cc_item = cc_item,
+			cc_on = cc_on,
+			changed = changed,
+			constant_fn = constant_fn,
+			contrast = contrast,
+			disable_all_efx = disable_all_efx,
+			disable_all_lights = disable_all_lights,
+			display_mode = display_mode,
+			do_force_shadow_bias = do_force_shadow_bias,
+			do_remember = do_remember,
+			do_third_person = do_third_person,
+			dof_on = dof_on,
+			dof_options = dof_options,
+			ev_value = ev_value,
+			filter_on = filter_on,
+			freecam_changed = freecam_changed,
+			freecam_light_enabled = freecam_light_enabled,
+			freecam_on = freecam_on,
+			frozenFOV = frozenFOV,
+			frozen_scene = frozen_scene,
+			graphics_settings_mgr = graphics_settings_mgr,
+			greenscreen_on = greenscreen_on,
+			gs_color = gs_color,
+			hi_quality = hi_quality,
+			hud_disabled = hud_disabled,
+			is_constant = is_constant,
+			is_drawing_freecam_ui = is_drawing_freecam_ui,
+			last_move_timer = last_move_timer,
+			mot_fn = mot_fn,
+			orig_render_output_id = orig_render_output_id,
+			rt_enabled = rt_enabled,
+			rt_reflections_enabled = rt_reflections_enabled,
+			show_cam_lights = show_cam_lights,
+			softbloom_on = softbloom_on,
+			ssao_intensity = ssao_intensity,
+			ssao_on = ssao_on,
+			ssao_tint = ssao_tint,
+			stage_rot_func = stage_rot_func,
+			temp_fn = temp_fn,
+			temp_fns = temp_fns,
+			temporal_ssao = temporal_ssao,
+			txt = txt,
+			use_frozen_fov = use_frozen_fov,
+			use_orthographic = use_orthographic,
+			vignette_on = vignette_on,
+			vol_on = vol_on,
+			was_changed = was_changed,
+		},
+		camera = {
+			attached_children = attached_children,
+			cam = cam,
+			cam_attached = cam_attached,
+			cam_gameobj = cam_gameobj,
+			cam_light = cam_light,
+			cam_lights = cam_lights,
+			cam_lights_map = cam_lights_map,
+			cam_xform = cam_xform,
+			do_cam_orbit = do_cam_orbit,
+			dummy = dummy,
+			last_camera_matrix = last_camera_matrix,
+			last_mouse_pos = last_mouse_pos,
+			last_pos_and_rot = last_pos_and_rot,
+			pos_before_teleport = pos_before_teleport,
+			sceneview = sceneview,
+		},
+		lighting = {
+			all_lights = all_lights,
+			cached_lightprobes = cached_lightprobes,
+		},
+		sf6 = {
+			distortion_on = distortion_on,
+			frozen_funcs = frozen_funcs,
+			movechars_on = movechars_on,
+			movelights_on = movelights_on,
+			movestage_on = movestage_on,
+			movestage_only_lights = movestage_only_lights,
+			players = players,
+			sf6_data = sf6_data,
+			tps_dummy = tps_dummy,
+			tps_mount = tps_mount,
+			tps_parent_joint_name = tps_parent_joint_name,
+		},
+		settings = {
+			default_settings = default_settings,
+			freecam_settings = freecam_settings,
+		},
+		ui = {
+			filter_options = filter_options,
+			imgui_data = imgui_data,
+			lightconfig_names = lightconfig_names,
+			lightconfigs_glob = lightconfigs_glob,
+			mount_obj_jname = mount_obj_jname,
+			mount_obj_name = mount_obj_name,
+			mounting_fn = mounting_fn,
+		},
+		game = {
+			battleflow = battleflow,
+			can_rt = can_rt,
+			candela_multi = candela_multi,
+			display_type_names = display_type_names,
+			held_transforms = held_transforms,
+			isDMC = isDMC,
+			isMHR = isMHR,
+			isRE3 = isRE3,
+			isRE7 = isRE7,
+			isRE8 = isRE8,
+			isSF6 = isSF6,
+			scene = scene,
+			scene_mgr_typedef = scene_mgr_typedef,
+			should_expand_cam_lights_menu = should_expand_cam_lights_menu,
+		},
+		runtime = {
+			EMV = EMV,
+			Quaternion = Quaternion,
+			Vector3f = Vector3f,
+			hk = hk,
+			imgui = imgui,
+			json = json,
+			re = re,
+			reframework = reframework,
+			sdk = sdk,
+		},
+		functions = {
+			apply_shadow_bias = apply_shadow_bias,
+			attach_detach = attach_detach,
+			change_player_mat_params = change_player_mat_params,
+			change_quality = change_quality,
+			create_new_cam_light = create_new_cam_light,
+			create_or_toggle_cam_light = create_or_toggle_cam_light,
+			create_resource = create_resource,
+			dump_settings = dump_settings,
+			find_index = find_index,
+			getC = getC,
+			get_mouse_pos = get_mouse_pos,
+			light_lookat_fn = light_lookat_fn,
+			lua_get_system_array = lua_get_system_array,
+			managed_object_control_panel = managed_object_control_panel,
+			move_light_by_dummy_independently = move_light_by_dummy_independently,
+			move_to_light = move_to_light,
+			recurse_def_settings = recurse_def_settings,
+			reset_dummy_pos = reset_dummy_pos,
+			setup_stage_attach = setup_stage_attach,
+			tooltip = tooltip,
+		},
+	}
+
+	function context.sync_to_freecam()
+		cc_factors = context.state.cc_factors
+		cc_item = context.state.cc_item
+		cc_on = context.state.cc_on
+		changed = context.state.changed
+		constant_fn = context.state.constant_fn
+		contrast = context.state.contrast
+		disable_all_efx = context.state.disable_all_efx
+		disable_all_lights = context.state.disable_all_lights
+		display_mode = context.state.display_mode
+		do_force_shadow_bias = context.state.do_force_shadow_bias
+		do_remember = context.state.do_remember
+		do_third_person = context.state.do_third_person
+		dof_on = context.state.dof_on
+		dof_options = context.state.dof_options
+		ev_value = context.state.ev_value
+		filter_on = context.state.filter_on
+		freecam_changed = context.state.freecam_changed
+		freecam_light_enabled = context.state.freecam_light_enabled
+		freecam_on = context.state.freecam_on
+		frozenFOV = context.state.frozenFOV
+		frozen_scene = context.state.frozen_scene
+		graphics_settings_mgr = context.state.graphics_settings_mgr
+		greenscreen_on = context.state.greenscreen_on
+		gs_color = context.state.gs_color
+		hi_quality = context.state.hi_quality
+		hud_disabled = context.state.hud_disabled
+		is_constant = context.state.is_constant
+		is_drawing_freecam_ui = context.state.is_drawing_freecam_ui
+		last_move_timer = context.state.last_move_timer
+		mot_fn = context.state.mot_fn
+		orig_render_output_id = context.state.orig_render_output_id
+		rt_enabled = context.state.rt_enabled
+		rt_reflections_enabled = context.state.rt_reflections_enabled
+		show_cam_lights = context.state.show_cam_lights
+		softbloom_on = context.state.softbloom_on
+		ssao_intensity = context.state.ssao_intensity
+		ssao_on = context.state.ssao_on
+		ssao_tint = context.state.ssao_tint
+		stage_rot_func = context.state.stage_rot_func
+		temp_fn = context.state.temp_fn
+		temp_fns = context.state.temp_fns
+		temporal_ssao = context.state.temporal_ssao
+		txt = context.state.txt
+		use_frozen_fov = context.state.use_frozen_fov
+		use_orthographic = context.state.use_orthographic
+		vignette_on = context.state.vignette_on
+		vol_on = context.state.vol_on
+		was_changed = context.state.was_changed
+		attached_children = context.camera.attached_children
+		cam = context.camera.cam
+		cam_attached = context.camera.cam_attached
+		cam_gameobj = context.camera.cam_gameobj
+		cam_light = context.camera.cam_light
+		cam_lights = context.camera.cam_lights
+		cam_lights_map = context.camera.cam_lights_map
+		cam_xform = context.camera.cam_xform
+		do_cam_orbit = context.camera.do_cam_orbit
+		dummy = context.camera.dummy
+		last_camera_matrix = context.camera.last_camera_matrix
+		last_mouse_pos = context.camera.last_mouse_pos
+		last_pos_and_rot = context.camera.last_pos_and_rot
+		pos_before_teleport = context.camera.pos_before_teleport
+		sceneview = context.camera.sceneview
+		all_lights = context.lighting.all_lights
+		cached_lightprobes = context.lighting.cached_lightprobes
+		distortion_on = context.sf6.distortion_on
+		frozen_funcs = context.sf6.frozen_funcs
+		movechars_on = context.sf6.movechars_on
+		movelights_on = context.sf6.movelights_on
+		movestage_on = context.sf6.movestage_on
+		movestage_only_lights = context.sf6.movestage_only_lights
+		players = context.sf6.players
+		sf6_data = context.sf6.sf6_data
+		tps_dummy = context.sf6.tps_dummy
+		tps_mount = context.sf6.tps_mount
+		tps_parent_joint_name = context.sf6.tps_parent_joint_name
+		default_settings = context.settings.default_settings
+		freecam_settings = context.settings.freecam_settings
+		filter_options = context.ui.filter_options
+		imgui_data = context.ui.imgui_data
+		lightconfig_names = context.ui.lightconfig_names
+		lightconfigs_glob = context.ui.lightconfigs_glob
+		mount_obj_jname = context.ui.mount_obj_jname
+		mount_obj_name = context.ui.mount_obj_name
+		mounting_fn = context.ui.mounting_fn
+		battleflow = context.game.battleflow
+		can_rt = context.game.can_rt
+		candela_multi = context.game.candela_multi
+		display_type_names = context.game.display_type_names
+		held_transforms = context.game.held_transforms
+		isDMC = context.game.isDMC
+		isMHR = context.game.isMHR
+		isRE3 = context.game.isRE3
+		isRE7 = context.game.isRE7
+		isRE8 = context.game.isRE8
+		isSF6 = context.game.isSF6
+		scene = context.game.scene
+		scene_mgr_typedef = context.game.scene_mgr_typedef
+		should_expand_cam_lights_menu = context.game.should_expand_cam_lights_menu
+	end
+
+	function context.sync_from_freecam()
+		context.state.cc_factors = cc_factors
+		context.state.cc_item = cc_item
+		context.state.cc_on = cc_on
+		context.state.changed = changed
+		context.state.constant_fn = constant_fn
+		context.state.contrast = contrast
+		context.state.disable_all_efx = disable_all_efx
+		context.state.disable_all_lights = disable_all_lights
+		context.state.display_mode = display_mode
+		context.state.do_force_shadow_bias = do_force_shadow_bias
+		context.state.do_remember = do_remember
+		context.state.do_third_person = do_third_person
+		context.state.dof_on = dof_on
+		context.state.dof_options = dof_options
+		context.state.ev_value = ev_value
+		context.state.filter_on = filter_on
+		context.state.freecam_changed = freecam_changed
+		context.state.freecam_light_enabled = freecam_light_enabled
+		context.state.freecam_on = freecam_on
+		context.state.frozenFOV = frozenFOV
+		context.state.frozen_scene = frozen_scene
+		context.state.graphics_settings_mgr = graphics_settings_mgr
+		context.state.greenscreen_on = greenscreen_on
+		context.state.gs_color = gs_color
+		context.state.hi_quality = hi_quality
+		context.state.hud_disabled = hud_disabled
+		context.state.is_constant = is_constant
+		context.state.is_drawing_freecam_ui = is_drawing_freecam_ui
+		context.state.last_move_timer = last_move_timer
+		context.state.mot_fn = mot_fn
+		context.state.orig_render_output_id = orig_render_output_id
+		context.state.rt_enabled = rt_enabled
+		context.state.rt_reflections_enabled = rt_reflections_enabled
+		context.state.show_cam_lights = show_cam_lights
+		context.state.softbloom_on = softbloom_on
+		context.state.ssao_intensity = ssao_intensity
+		context.state.ssao_on = ssao_on
+		context.state.ssao_tint = ssao_tint
+		context.state.stage_rot_func = stage_rot_func
+		context.state.temp_fn = temp_fn
+		context.state.temp_fns = temp_fns
+		context.state.temporal_ssao = temporal_ssao
+		context.state.txt = txt
+		context.state.use_frozen_fov = use_frozen_fov
+		context.state.use_orthographic = use_orthographic
+		context.state.vignette_on = vignette_on
+		context.state.vol_on = vol_on
+		context.state.was_changed = was_changed
+		context.camera.attached_children = attached_children
+		context.camera.cam = cam
+		context.camera.cam_attached = cam_attached
+		context.camera.cam_gameobj = cam_gameobj
+		context.camera.cam_light = cam_light
+		context.camera.cam_lights = cam_lights
+		context.camera.cam_lights_map = cam_lights_map
+		context.camera.cam_xform = cam_xform
+		context.camera.do_cam_orbit = do_cam_orbit
+		context.camera.dummy = dummy
+		context.camera.last_camera_matrix = last_camera_matrix
+		context.camera.last_mouse_pos = last_mouse_pos
+		context.camera.last_pos_and_rot = last_pos_and_rot
+		context.camera.pos_before_teleport = pos_before_teleport
+		context.camera.sceneview = sceneview
+		context.lighting.all_lights = all_lights
+		context.lighting.cached_lightprobes = cached_lightprobes
+		context.sf6.distortion_on = distortion_on
+		context.sf6.frozen_funcs = frozen_funcs
+		context.sf6.movechars_on = movechars_on
+		context.sf6.movelights_on = movelights_on
+		context.sf6.movestage_on = movestage_on
+		context.sf6.movestage_only_lights = movestage_only_lights
+		context.sf6.players = players
+		context.sf6.sf6_data = sf6_data
+		context.sf6.tps_dummy = tps_dummy
+		context.sf6.tps_mount = tps_mount
+		context.sf6.tps_parent_joint_name = tps_parent_joint_name
+		context.settings.default_settings = default_settings
+		context.settings.freecam_settings = freecam_settings
+		context.ui.filter_options = filter_options
+		context.ui.imgui_data = imgui_data
+		context.ui.lightconfig_names = lightconfig_names
+		context.ui.lightconfigs_glob = lightconfigs_glob
+		context.ui.mount_obj_jname = mount_obj_jname
+		context.ui.mount_obj_name = mount_obj_name
+		context.ui.mounting_fn = mounting_fn
+		context.game.battleflow = battleflow
+		context.game.can_rt = can_rt
+		context.game.candela_multi = candela_multi
+		context.game.display_type_names = display_type_names
+		context.game.held_transforms = held_transforms
+		context.game.isDMC = isDMC
+		context.game.isMHR = isMHR
+		context.game.isRE3 = isRE3
+		context.game.isRE7 = isRE7
+		context.game.isRE8 = isRE8
+		context.game.isSF6 = isSF6
+		context.game.scene = scene
+		context.game.scene_mgr_typedef = scene_mgr_typedef
+		context.game.should_expand_cam_lights_menu = should_expand_cam_lights_menu
+	end
+
+	local function bind_stateful(func)
+		return function(...)
+			-- Immediate UI calls must publish pending context edits before invoking FreeCam helpers.
+			if context.active then
+				context.sync_to_freecam()
+			end
+			local results = table.pack(func(...))
+			context.sync_from_freecam()
+			return table.unpack(results, 1, results.n)
+		end
+	end
+
+	context.functions.change_quality = bind_stateful(change_quality)
+	context.functions.create_new_cam_light = bind_stateful(create_new_cam_light)
+	context.functions.create_or_toggle_cam_light = bind_stateful(create_or_toggle_cam_light)
+	context.functions.move_to_light = bind_stateful(move_to_light)
+	context.functions.reset_dummy_pos = bind_stateful(reset_dummy_pos)
+	context.functions.setup_stage_attach = bind_stateful(setup_stage_attach)
+	return context
 end
 
 function display_freecam()
 	was_changed = false
 	local callbacks = {}
+	freecam_callback_context = freecam_callback_context or create_freecam_callback_context()
+	local context = freecam_callback_context
+	context.sync_from_freecam()
+	context.active = true
 
-	install_freecam_callbacks(callbacks, freecam_callback_scope_anchor)
-	draw_freecam_ui_node(freecam_ui_tree, callbacks)
+	install_freecam_callbacks(callbacks, context)
+	draw_freecam_ui_node(freecam_ui_tree, callbacks, context)
+	context.active = false
+	context.sync_to_freecam()
 end
 
 re.on_draw_ui(function()

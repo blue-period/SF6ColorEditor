@@ -55,3 +55,18 @@ Fri Sep  4 11:08:38 EDT 2026:
   and the 1,222 relocated lines match the originals. Runtime testing requires launching REFramework.
 
 ```
+
+
+Fri Sep  4 11:30:22 EDT 2026:
+```
+ Refactored per notes/plan5.md:
+
+  - Removed all debug API, _ENV, bindings, and scope-anchor logic.
+  - Added an explicit grouped context in reframework/autorun/FreeCam.lua:726.
+  - Updated callbacks to use explicit context dependencies in reframework/autorun/callbacks.lua:1.
+  - Preserved shared and deferred state through synchronized, persistent context.
+  - Lua syntax, dependency declarations, and whitespace checks pass.
+```
+
+
+
