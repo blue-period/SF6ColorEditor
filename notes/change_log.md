@@ -43,3 +43,15 @@ Done. I added reframework/autorun/callbacks.lua:1 and updated reframework/autoru
   Verification: git diff --check passes and both files have 0 carriage returns. I still could not run a Lua
   syntax check because lua/luac are not installed here.
 ```
+
+
+Fri Sep  4 11:08:38 EDT 2026:
+
+```
+ Moved all callback implementations into reframework/autorun/callbacks.lua:33. display_freecam is now only setup
+  and dispatch in reframework/autorun/FreeCam.lua:830.
+
+  Shared camera state remains synchronized through a scoped binding proxy. Both files pass Lua parser validation,
+  and the 1,222 relocated lines match the originals. Runtime testing requires launching REFramework.
+
+```
