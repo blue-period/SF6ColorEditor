@@ -722,6 +722,8 @@ local function draw_freecam_ui_node(node, callbacks, context)
 	end
 end
 
+local install_freecam_callbacks = require("callbacks")
+
 function display_freecam()
 	
 	was_changed = false
@@ -734,19 +736,19 @@ function display_freecam()
 		end
 	end
 
-	callbacks["Enable FreeCam"] = function()
+	local function draw_enable_freecam()
 		freecam_changed, freecam_on = imgui.checkbox("Enable FreeCam        ", freecam_on)
 		if freecam_changed then 
 			last_mouse_pos = get_mouse_pos()
 		end
 	end
 
-	callbacks["Hide UI"] = function()
+	local function draw_hide_ui()
 		imgui.same_line()
 		changed, hud_disabled = imgui.checkbox("Hide UI", hud_disabled)
 	end
 
-	callbacks["2x Quality"] = function()
+	local function draw_quality_toggle()
 		imgui.same_line()
 		changed, hi_quality = imgui.checkbox("2x Quality", hi_quality)
 		tooltip("Renders the game at double your resolution, then scales it down")
@@ -755,7 +757,7 @@ function display_freecam()
 		end
 	end
 
-	callbacks["Freeze Time & Scene"] = function()
+	local function draw_freeze_time_and_scene()
 		changed, frozen_scene = imgui.checkbox("Freeze Time & Scene", frozen_scene)
 		if changed then 
 			sdk.call_native_func(sdk.get_native_singleton("via.Application"), sdk.find_type_definition("via.Application"), "set_GlobalSpeed", (frozen_scene and 0.00001) or 1.0)
@@ -763,7 +765,7 @@ function display_freecam()
 		end
 	end
 
-	callbacks["Orthographic Cam"] = function()
+	local function draw_orthographic_cam()
 		if cam and not imgui.same_line() then
 			changed, use_orthographic = imgui.checkbox("Orthographic Cam", (cam:call("get_ProjectionType") == 1))
 			if changed then 
@@ -772,7 +774,7 @@ function display_freecam()
 		end
 	end
 
-	callbacks["Enable Cam Light"] = function()
+	local function draw_enable_cam_light()
 		if not cam then return end
 		changed, freecam_light_enabled = imgui.checkbox("Enable Cam Light", freecam_light_enabled)
 		tooltip("Attaches a configurable light to the camera")
@@ -785,7 +787,7 @@ function display_freecam()
 		end
 	end
 
-	callbacks["SF6 Tools"] = function()
+	local function draw_sf6_tools()
 		if isSF6 and players[2] then
 			if imgui.tree_node("SF6 Tools") then
 				imgui.begin_rect()
@@ -1080,7 +1082,7 @@ function display_freecam()
 		end
 	end
 	
-	callbacks["Lua FreeCam v1.9.0"] = function(node)
+	local function draw_lua_freecam_root(node)
 		if imgui.tree_node(node.name) then
 		
 		is_drawing_freecam_ui = true
@@ -1948,6 +1950,17 @@ function display_freecam()
 		end
 		imgui.spacing()
 	end
+
+	install_freecam_callbacks(callbacks, {
+		draw_enable_freecam = draw_enable_freecam,
+		draw_hide_ui = draw_hide_ui,
+		draw_quality_toggle = draw_quality_toggle,
+		draw_freeze_time_and_scene = draw_freeze_time_and_scene,
+		draw_orthographic_cam = draw_orthographic_cam,
+		draw_enable_cam_light = draw_enable_cam_light,
+		draw_sf6_tools = draw_sf6_tools,
+		draw_lua_freecam_root = draw_lua_freecam_root,
+	})
 
 	draw_freecam_ui_node(freecam_ui_tree, callbacks)
 end

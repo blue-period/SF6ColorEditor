@@ -27,3 +27,19 @@ Thu Sep  3 21:51:50 EDT 2026:
   at reframework/autorun/FreeCam.lua:1938.
 
 ```
+
+
+Thu Sep  3 21:57:23 EDT 2026:
+
+```
+Done. I added reframework/autorun/callbacks.lua:1 and updated reframework/autorun/FreeCam.lua:725 to load it
+  with:
+
+  local install_freecam_callbacks = require("callbacks")
+
+  callbacks.lua now owns the callback registry entries, including SF6 Tools. FreeCam.lua passes in local draw
+  functions as context so those callbacks can still access the script’s local state safely.
+
+  Verification: git diff --check passes and both files have 0 carriage returns. I still could not run a Lua
+  syntax check because lua/luac are not installed here.
+```
