@@ -606,3 +606,10 @@ Knows how to display one character.
 
 The renderer never learns what a CMD file is, what a material is, or even what "P1" means. It simply asks the callback registry, "Who handles this node?" and invokes whatever function is registered. That separation is what makes the design feel clean and extensible: the UI engine stays constant while you add new capabilities simply by registering new callbacks.
 
+
+
+
+
+
+
+ISSUES: In script runner, log lua errors to disk, where is the log file located?
