@@ -1,3 +1,19 @@
+function printTable(tbl, indent)
+    indent = indent or 0
+
+    local spacing = string.rep("  ", indent)
+
+    for key, value in pairs(tbl) do
+        if type(value) == "table" then
+            print(spacing .. tostring(key) .. " = {")
+            printTable(value, indent + 1)
+            print(spacing .. "}")
+        else
+            print(spacing .. tostring(key) .. " = " .. tostring(value))
+        end
+    end
+end
+
 local function install_callbacks(callbacks, context)
 	local state = context.state
 	local camera = context.camera
@@ -336,7 +352,7 @@ local function install_callbacks(callbacks, context)
 
 									state.changed, sf6.sf6_data[name.."_animation_frame"] = runtime.imgui.slider_float("Frame", layer0:get_Frame(), 0, layer0:get_EndFrame())
 									if state.changed then
-										state.mot_fn = function() layer0:set_Frame(sf6.sf6_data[name.."_animation_frame"]) end
+										state.mot_fn = function() layer1:set_Frame(sf6.sf6_data[name.."_animation_frame"]) end
 									end
 
 									state.changed, sf6.sf6_data[name.."_animation_speed"] = runtime.imgui.slider_float("Speed", layer0:get_Speed(), 0, 1)
@@ -348,7 +364,12 @@ local function install_callbacks(callbacks, context)
 								end
 
 								if runtime.EMV then
+                                    log.debug("Inside EMV")
 									local go = game.held_transforms[xform] or runtime.EMV.GameObject:new{xform=xform}
+
+                                    table_string = printTable(go)
+                                    --fs.write("LOGS/go_table.txt", table_string)
+
 									runtime.EMV.imgui_anim_object_viewer(go)
 								end
 							runtime.imgui.end_rect(2)
