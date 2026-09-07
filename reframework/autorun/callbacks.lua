@@ -28,11 +28,114 @@ function printTable(tbl)
     return result
 end
 
+-- Return a readable, read-only description of a REFramework managed userdata
+-- object and also write it to the REFramework log. This intentionally lists
+-- method signatures instead of calling getters: getters may have side effects.
+local function print_managed_userdata(runtime, value)
+    local lines = {}
+    if type(value) ~= "userdata" or not runtime.sdk.is_managed_object(value) then
+        local message = "Expected managed userdata, got " .. type(value) .. ": " .. tostring(value)
+        log.info(message)
+        return message
+    end
+
+    local ok, err = pcall(function()
+        local typedef = value:get_type_definition()
+        lines[#lines + 1] = "Managed userdata: " .. typedef:get_full_name()
+        lines[#lines + 1] = "Address: " .. tostring(value:get_address())
+        lines[#lines + 1] = "Fields:"
+
+        for _, field in ipairs(typedef:get_fields()) do
+            local field_ok, field_line = pcall(function()
+                local field_value = field:get_data(value)
+                return string.format("  %s %s = %s", field:get_type():get_full_name(), field:get_name(), runtime.EMV.logv(field_value, nil, 0))
+            end)
+            lines[#lines + 1] = field_ok and field_line or ("  " .. field:get_name() .. " = <unreadable: " .. tostring(field_line) .. ">")
+        end
+
+        lines[#lines + 1] = "Methods:"
+        for _, method in ipairs(typedef:get_methods()) do
+            local method_ok, method_line = pcall(function()
+                local return_type = method:get_return_type()
+                local parameter_types = {}
+                for _, parameter_type in ipairs(method:get_param_types()) do
+                    parameter_types[#parameter_types + 1] = parameter_type:get_full_name()
+                end
+                return string.format(
+                    "  %s %s(%s)",
+                    return_type and return_type:get_full_name() or "void",
+                    method:get_name(),
+                    table.concat(parameter_types, ", ")
+                )
+            end)
+            lines[#lines + 1] = method_ok and method_line or ("  " .. method:get_name() .. "(<unreadable signature>)")
+        end
+    end)
+
+    if not ok then
+        lines[#lines + 1] = "Inspection failed: " .. tostring(err)
+    end
+
+    local output = table.concat(lines, "\n")
+    log.info(output)
+    return output
+end
+
+-- A section-filtered equivalent of EMV's imgui_anim_object_viewer. Keeping it
+-- here avoids requiring a modified copy of EMV Engine.
+local function draw_filtered_anim_object_viewer(runtime, game, fn, anim_object, sections, object_name)
+    if not anim_object or not anim_object.xform then return end
+
+    local xform = anim_object.xform
+    anim_object = game.held_transforms[xform] or runtime.EMV.GameObject:new_AnimObject{xform=xform}
+    if not anim_object then return end
+    game.held_transforms[xform] = anim_object
+    object_name = object_name or anim_object.name or "Object"
+    anim_object.opened = nil
+
+    if sections.transform and runtime.imgui.tree_node_ptr_id(anim_object.gameobj, object_name) then
+        fn.managed_object_control_panel(anim_object.xform, "Transform", anim_object.name)
+        runtime.imgui.tree_pop()
+    end
+
+    if sections.hierarchy and (anim_object.parent or anim_object.children) and runtime.imgui.tree_node_ptr_id(anim_object.xform, "Parent / Children") then
+        if anim_object.parent then
+            local parent = game.held_transforms[anim_object.parent] or runtime.EMV.GameObject:new_AnimObject{xform=anim_object.parent}
+            if parent and runtime.imgui.tree_node_str_id(tostring(xform) .. "Parent", "Parent: " .. (parent.name or "Object")) then
+                draw_filtered_anim_object_viewer(runtime, game, fn, parent, sections)
+                runtime.imgui.tree_pop()
+            end
+        end
+
+        for index, child_xform in ipairs(anim_object.children or {}) do
+            local child = game.held_transforms[child_xform] or runtime.EMV.GameObject:new_AnimObject{xform=child_xform}
+            if child and runtime.imgui.tree_node_str_id(tostring(xform) .. "Child" .. index, "Child: " .. (child.name or "Object")) then
+                draw_filtered_anim_object_viewer(runtime, game, fn, child, sections)
+                runtime.imgui.tree_pop()
+            end
+        end
+        runtime.imgui.tree_pop()
+    end
+
+    if sections.motion and anim_object.components_named and anim_object.components_named.Motion then
+        anim_object.opened = true
+        anim_object:imgui_motion()
+    end
+
+    if sections.action_monitor and not figure_mode and not cutscene_mode and anim_object.behaviortrees and anim_object.behaviortrees[1] then
+        anim_object.opened = true
+        anim_object:action_monitor()
+    end
+
+    if sections.materials and anim_object.materials and runtime.imgui.tree_node_ptr_id(anim_object.mesh, "Materials") then
+        runtime.EMV.show_imgui_mats(anim_object)
+        runtime.imgui.tree_pop()
+    end
+end
+
 
 
 local function install_callbacks(callbacks, context)
-
-    local logged_fr = false
 
 	local state = context.state
 	local camera = context.camera
@@ -106,7 +209,6 @@ local function install_callbacks(callbacks, context)
 	end
 
 	local function draw_sf6_tools()
-        --local logged_fr = false
 		if game.isSF6 and sf6.players[2] then
 			if runtime.imgui.tree_node("SF6 Tools") then
 				runtime.imgui.begin_rect()
@@ -383,18 +485,34 @@ local function install_callbacks(callbacks, context)
 									runtime.imgui.tree_pop()
 								end
 
-								if runtime.EMV and not logged_fr then
-                                    log.debug("Inside EMV")
+								if runtime.EMV then
 									local go = game.held_transforms[xform] or runtime.EMV.GameObject:new{xform=xform}
-                                    -- this is a userdata object 
-                                    -- I want to be able to read the userdata objects in a way that allows me to choose what I can display from them.Then if I manipulte whats in go, the imgui_anim_object_viewer will only show the parts that I want it to
-                                    elem = go["children"][1]
-                                   -- print(type(elem))
-                                   -- print(type(elem.call))
-                                   -- print(logv(elem, nil, 0))
+									state.anim_object_viewer_sections = state.anim_object_viewer_sections or {
+										transform = true,
+										hierarchy = true,
+										motion = true,
+										action_monitor = true,
+										materials = true,
+									}
 
-									runtime.EMV.imgui_anim_object_viewer(go)
-                                    logged_fr = true
+									if runtime.imgui.tree_node("Object Viewer Sections") then
+										local sections = state.anim_object_viewer_sections
+										local section_changed
+										section_changed, sections.transform = runtime.imgui.checkbox("Transform", sections.transform)
+										section_changed, sections.hierarchy = runtime.imgui.checkbox("Parent / Children", sections.hierarchy)
+										section_changed, sections.motion = runtime.imgui.checkbox("Motion", sections.motion)
+										section_changed, sections.action_monitor = runtime.imgui.checkbox("Action Monitor", sections.action_monitor)
+										section_changed, sections.materials = runtime.imgui.checkbox("Materials", sections.materials)
+
+										local first_child = go.children and go.children[1]
+										if first_child and runtime.imgui.button("Log First Child Userdata") then
+											print_managed_userdata(runtime, first_child)
+										end
+										fn.tooltip("Writes the child's managed type, fields, and method signatures to the REFramework log")
+										runtime.imgui.tree_pop()
+									end
+
+									draw_filtered_anim_object_viewer(runtime, game, fn, go, state.anim_object_viewer_sections)
 								end
 							runtime.imgui.end_rect(2)
 							runtime.imgui.tree_pop()
