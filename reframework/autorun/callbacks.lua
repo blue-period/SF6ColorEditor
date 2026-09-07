@@ -386,30 +386,12 @@ local function install_callbacks(callbacks, context)
 								if runtime.EMV and not logged_fr then
                                     log.debug("Inside EMV")
 									local go = game.held_transforms[xform] or runtime.EMV.GameObject:new{xform=xform}
-                                    --table_string = printTable(go["children"])
-                                    --fs.write("LOGS/go_table.txt", table_string)
-                                    --function printTableR(tbl, indent, recurse)
-                                    --log.debug(type(go["children"]))
-                                    --tbl_str = printTable(go["children"], 0, 5)
-
---                                    for key, _ in pairs(go["children"]) do
---                                        print(type(key))
---                                    end
---                                    
                                     -- this is a userdata object 
+                                    -- I want to be able to read the userdata objects in a way that allows me to choose what I can display from them.Then if I manipulte whats in go, the imgui_anim_object_viewer will only show the parts that I want it to
                                     elem = go["children"][1]
                                    -- print(type(elem))
                                    -- print(type(elem.call))
                                    -- print(logv(elem, nil, 0))
-
-
-                                   -- local mt = getmetatable(elem)
-
-                                   -- if mt then
-                                   --     for k, v in pairs(mt) do
-                                   --         print(tostring(k), type(v))
-                                   --     end
-                                   -- end
 
 									runtime.EMV.imgui_anim_object_viewer(go)
                                     logged_fr = true
