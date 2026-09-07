@@ -488,10 +488,10 @@ local function install_callbacks(callbacks, context)
 								if runtime.EMV then
 									local go = game.held_transforms[xform] or runtime.EMV.GameObject:new{xform=xform}
 									state.anim_object_viewer_sections = state.anim_object_viewer_sections or {
-										transform = true,
-										hierarchy = true,
-										motion = true,
-										action_monitor = true,
+										transform = false,
+										hierarchy = false,
+										motion = false,
+										action_monitor = false,
 										materials = true,
 									}
 
