@@ -1,20 +1,39 @@
-function printTable(tbl, indent)
+function printTableR(tbl, indent, recurse)
     indent = indent or 0
+    recurse = recurse or 0
 
     local spacing = string.rep("  ", indent)
+    local result = ""
 
     for key, value in pairs(tbl) do
-        if type(value) == "table" then
-            print(spacing .. tostring(key) .. " = {")
-            printTable(value, indent + 1)
-            print(spacing .. "}")
+        if type(value) == "table" and recurse > 0 then
+            result = result .. spacing .. tostring(key) .. " = {\n"
+            result = result .. printTableR(value, indent + 1, recurse - 1)
+            result = result .. spacing .. "}\n"
         else
-            print(spacing .. tostring(key) .. " = " .. tostring(value))
+            result = result .. spacing .. tostring(key) .. " = " .. tostring(value) .. "\n"
         end
     end
+
+    return result
 end
 
+function printTable(tbl)
+    local result = ""
+
+    for key, value in pairs(tbl) do
+        result = result .. tostring(key) .. " = " .. tostring(value) .. "\n"
+    end
+
+    return result
+end
+
+
+
 local function install_callbacks(callbacks, context)
+
+    local logged_fr = false
+
 	local state = context.state
 	local camera = context.camera
 	local lighting = context.lighting
@@ -87,6 +106,7 @@ local function install_callbacks(callbacks, context)
 	end
 
 	local function draw_sf6_tools()
+        --local logged_fr = false
 		if game.isSF6 and sf6.players[2] then
 			if runtime.imgui.tree_node("SF6 Tools") then
 				runtime.imgui.begin_rect()
@@ -363,14 +383,36 @@ local function install_callbacks(callbacks, context)
 									runtime.imgui.tree_pop()
 								end
 
-								if runtime.EMV then
+								if runtime.EMV and not logged_fr then
                                     log.debug("Inside EMV")
 									local go = game.held_transforms[xform] or runtime.EMV.GameObject:new{xform=xform}
-
-                                    table_string = printTable(go)
+                                    --table_string = printTable(go["children"])
                                     --fs.write("LOGS/go_table.txt", table_string)
+                                    --function printTableR(tbl, indent, recurse)
+                                    --log.debug(type(go["children"]))
+                                    --tbl_str = printTable(go["children"], 0, 5)
+
+--                                    for key, _ in pairs(go["children"]) do
+--                                        print(type(key))
+--                                    end
+--                                    
+                                    -- this is a userdata object 
+                                    elem = go["children"][1]
+                                   -- print(type(elem))
+                                   -- print(type(elem.call))
+                                   -- print(logv(elem, nil, 0))
+
+
+                                   -- local mt = getmetatable(elem)
+
+                                   -- if mt then
+                                   --     for k, v in pairs(mt) do
+                                   --         print(tostring(k), type(v))
+                                   --     end
+                                   -- end
 
 									runtime.EMV.imgui_anim_object_viewer(go)
+                                    logged_fr = true
 								end
 							runtime.imgui.end_rect(2)
 							runtime.imgui.tree_pop()
