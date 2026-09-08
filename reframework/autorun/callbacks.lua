@@ -487,32 +487,16 @@ local function install_callbacks(callbacks, context)
 
 								if runtime.EMV then
 									local go = game.held_transforms[xform] or runtime.EMV.GameObject:new{xform=xform}
-									state.anim_object_viewer_sections = state.anim_object_viewer_sections or {
-										transform = false,
-										hierarchy = false,
-										motion = false,
-										action_monitor = false,
-										materials = true,
-									}
-
-									if runtime.imgui.tree_node("Object Viewer Sections") then
-										local sections = state.anim_object_viewer_sections
-										local section_changed
-										section_changed, sections.transform = runtime.imgui.checkbox("Transform", sections.transform)
-										section_changed, sections.hierarchy = runtime.imgui.checkbox("Parent / Children", sections.hierarchy)
-										section_changed, sections.motion = runtime.imgui.checkbox("Motion", sections.motion)
-										section_changed, sections.action_monitor = runtime.imgui.checkbox("Action Monitor", sections.action_monitor)
-										section_changed, sections.materials = runtime.imgui.checkbox("Materials", sections.materials)
-
-										local first_child = go.children and go.children[1]
-										if first_child and runtime.imgui.button("Log First Child Userdata") then
-											print_managed_userdata(runtime, first_child)
-										end
-										fn.tooltip("Writes the child's managed type, fields, and method signatures to the REFramework log")
+									if runtime.imgui.tree_node("EMV Viewer") then
+										draw_filtered_anim_object_viewer(runtime, game, fn, go, {
+											transform = false,
+											hierarchy = true,
+											motion = false,
+											action_monitor = false,
+											materials = true,
+										})
 										runtime.imgui.tree_pop()
 									end
-
-									draw_filtered_anim_object_viewer(runtime, game, fn, go, state.anim_object_viewer_sections)
 								end
 							runtime.imgui.end_rect(2)
 							runtime.imgui.tree_pop()
