@@ -81,56 +81,28 @@ local function print_managed_userdata(runtime, value)
     return output
 end
 
--- A section-filtered equivalent of EMV's imgui_anim_object_viewer. Keeping it
--- here avoids requiring a modified copy of EMV Engine.
-local function draw_filtered_anim_object_viewer(runtime, game, fn, anim_object, sections, object_name)
-    if not anim_object or not anim_object.xform then return end
+-- Draw only the player's immediate EMV children and their material controls.
+-- This keeps the SF6 Tools tree focused on color/material editing without the
+-- transform and hierarchy nodes from the full EMV viewer.
+local function draw_player_material_children(runtime, game, player_xform)
+	local player = game.held_transforms[player_xform] or runtime.EMV.GameObject:new_AnimObject{xform=player_xform}
+	if not player then return end
+	game.held_transforms[player_xform] = player
 
-    local xform = anim_object.xform
-    anim_object = game.held_transforms[xform] or runtime.EMV.GameObject:new_AnimObject{xform=xform}
-    if not anim_object then return end
-    game.held_transforms[xform] = anim_object
-    object_name = object_name or anim_object.name or "Object"
-    anim_object.opened = nil
-
-    if sections.transform and runtime.imgui.tree_node_ptr_id(anim_object.gameobj, object_name) then
-        fn.managed_object_control_panel(anim_object.xform, "Transform", anim_object.name)
-        runtime.imgui.tree_pop()
-    end
-
-    if sections.hierarchy and (anim_object.parent or anim_object.children) and runtime.imgui.tree_node_ptr_id(anim_object.xform, "Parent / Children") then
-        if anim_object.parent then
-            local parent = game.held_transforms[anim_object.parent] or runtime.EMV.GameObject:new_AnimObject{xform=anim_object.parent}
-            if parent and runtime.imgui.tree_node_str_id(tostring(xform) .. "Parent", "Parent: " .. (parent.name or "Object")) then
-                draw_filtered_anim_object_viewer(runtime, game, fn, parent, sections)
-                runtime.imgui.tree_pop()
-            end
-        end
-
-        for index, child_xform in ipairs(anim_object.children or {}) do
-            local child = game.held_transforms[child_xform] or runtime.EMV.GameObject:new_AnimObject{xform=child_xform}
-            if child and runtime.imgui.tree_node_str_id(tostring(xform) .. "Child" .. index, "Child: " .. (child.name or "Object")) then
-                draw_filtered_anim_object_viewer(runtime, game, fn, child, sections)
-                runtime.imgui.tree_pop()
-            end
-        end
-        runtime.imgui.tree_pop()
-    end
-
-    if sections.motion and anim_object.components_named and anim_object.components_named.Motion then
-        anim_object.opened = true
-        anim_object:imgui_motion()
-    end
-
-    if sections.action_monitor and not figure_mode and not cutscene_mode and anim_object.behaviortrees and anim_object.behaviortrees[1] then
-        anim_object.opened = true
-        anim_object:action_monitor()
-    end
-
-    if sections.materials and anim_object.materials and runtime.imgui.tree_node_ptr_id(anim_object.mesh, "Materials") then
-        runtime.EMV.show_imgui_mats(anim_object)
-        runtime.imgui.tree_pop()
-    end
+	for index, child_xform in ipairs(player.children or {}) do
+		local child = game.held_transforms[child_xform] or runtime.EMV.GameObject:new_AnimObject{xform=child_xform}
+		if child then
+			game.held_transforms[child_xform] = child
+			local child_name = child.name or "Object"
+			if runtime.imgui.tree_node_str_id(tostring(player_xform) .. index, child_name) then
+				if child.materials and runtime.imgui.tree_node_ptr_id(child.mesh, "Materials") then
+					runtime.EMV.show_imgui_mats(child)
+					runtime.imgui.tree_pop()
+				end
+				runtime.imgui.tree_pop()
+			end
+		end
+	end
 end
 
 
@@ -208,300 +180,27 @@ local function install_callbacks(callbacks, context)
 		end
 	end
 
+
 	local function draw_sf6_tools()
 		if game.isSF6 and sf6.players[2] then
 			if runtime.imgui.tree_node("SF6 Tools") then
 				runtime.imgui.begin_rect()
-				if state.graphics_settings_mgr and runtime.imgui.tree_node("Graphics") then
-					fn.managed_object_control_panel(state.graphics_settings_mgr)
-					runtime.imgui.tree_pop()
-				end
-				state.changed, sf6.sf6_data.distortion_idx = runtime.imgui.combo("2D Distortion Effect", sf6.sf6_data.distortion_idx, {"Auto", "On", "Off"})
-				if state.changed then
-					sf6.distortion_on = ((sf6.sf6_data.distortion_idx == 1 and not state.freecam_on) or sf6.sf6_data.distortion_idx==2)
-					fn.change_player_mat_params("FixProjection_Switch", (sf6.distortion_on and 1.0) or 0.0)
-				end
-
-				state.changed, sf6.sf6_data.overlap_idx = runtime.imgui.combo("Overlapping Fighters", sf6.sf6_data.overlap_idx, {"Auto", "On", "Off"})
-				if state.changed then
-					sf6.sf6_data.overlap_on = ((sf6.sf6_data.overlap_idx == 1 and not state.freecam_on) or sf6.sf6_data.overlap_idx==2)
-				end
-
-				state.changed, sf6.sf6_data.fps_idx = runtime.imgui.combo("Frame Rate", sf6.sf6_data.fps_idx, {"60fps", "30fps", "120fps"})
-				if state.changed then
-					runtime.sdk.find_type_definition("app.Helper"):get_method("setAplicationFPS"):call(nil, (sf6.sf6_data.fps_idx==2 and 1) or (sf6.sf6_data.fps_idx==3 and 6) or 4, true)
-				end
-
-				state.changed, sf6.sf6_data.battle_damage_percent = runtime.imgui.slider_float("Set Battle Damage", sf6.sf6_data.battle_damage_percent, 0, 1)
-				if state.changed then
-					fn.change_player_mat_params("DamageLevel", sf6.sf6_data.battle_damage_percent)
-				end
-				fn.tooltip("Ctrl+click to type-in")
-				state.changed, sf6.sf6_data.sweat_percent = runtime.imgui.slider_float("Set Sweat", sf6.sf6_data.sweat_percent, 0, 1)
-				if state.changed then
-					fn.change_player_mat_params("Sweat_Rate", sf6.sf6_data.sweat_percent)
-				end
-				fn.tooltip("Ctrl+click to type-in")
-
-				state.changed, sf6.sf6_data.slow_motion_speed = runtime.imgui.slider_float("Slow Motion", sf6.sf6_data.slow_motion_speed, 0, 1)
-				fn.tooltip("Use with 'Show Character Gizmos' to stop stuttering")
-				if state.changed then
-					sf6.sf6_data.speed_sfix = sf6.sf6_data.speed_sfix:call("From(System.Single)", sf6.sf6_data.slow_motion_speed)
-					--sdk.find_type_definition("via.sfix"):get_method("From(System.Single)"):call(nil, sf6_data.slow_motion_speed)
-				end
-
-				state.changed, sf6.movechars_on = runtime.imgui.checkbox("Show Character Gizmos", sf6.movechars_on)
-
-				if next(sf6.frozen_funcs) then
-					if sf6.frozen_funcs[2] and not runtime.imgui.same_line() and runtime.imgui.button("Reset P1") then
-						sf6.frozen_funcs[2] = nil
-					end
-					if sf6.frozen_funcs[1] and not runtime.imgui.same_line() and runtime.imgui.button("Reset P2") then
-						sf6.frozen_funcs[1] = nil
-					end
-				end
-				state.changed, sf6.movelights_on = runtime.imgui.checkbox("Show Character Lights Gizmos", sf6.movelights_on)
-
-				if runtime.EMV then
-					local changed1, changed2
-					changed1, sf6.movestage_on = runtime.imgui.checkbox("Move Stage", sf6.movestage_on)
-					runtime.imgui.same_line()
-					changed2, sf6.movestage_only_lights = runtime.imgui.checkbox("Move Lights", sf6.movestage_only_lights)
-					if changed1 or changed2 then
-						camera.do_cam_orbit = false
-						state.mot_fn = function() ; fn.setup_stage_attach(nil, nil, nil, true) end
-					end
-
-					if (sf6.movestage_only_lights or sf6.movestage_on) and next(camera.attached_children) and not runtime.imgui.same_line() then
-						if runtime.imgui.button("Save") then
-							state.mot_fn = function() ; fn.setup_stage_attach(false, true) end
-						end
-						fn.tooltip("Save the changes as the new default positions/rotations for the "..(sf6.movestage_on and "Stage" or "Lights").." (until reload)")
-					end
-					--if next(attached_children) and not imgui.same_line() and imgui.button("Center Axis") then
-					--	temp_fn = reset_dummy_pos
-					--end
-					if (sf6.movestage_on or sf6.movestage_only_lights) and camera.dummy then
-						local prefix = sf6.movestage_on and "Stage" or "Lights"
-						local changed2, dummy_pos = runtime.imgui.drag_float3(prefix.." Position", camera.dummy.xform:call("get_Position"), 0.01, -10000, 10000)
-						local changed1, dummy_rot = runtime.imgui.drag_float3(prefix.." Rotation", camera.dummy.xform:call("get_EulerAngle"), 0.01, -360, 360)
-						local changed3, dummy_scale = runtime.imgui.drag_float3(prefix.." Scale", camera.dummy.xform:call("get_LocalScale"), 0.01, 0.001, 100.0)
-						if changed1 or changed2 or changed3 then
-							state.last_move_timer = os.clock()
-							state.stage_rot_func = function()
-								state.stage_rot_func = nil
-								camera.dummy.xform:call("set_Position", dummy_pos)
-								camera.dummy.xform:call("set_EulerAngle", dummy_rot)
-								camera.dummy.xform:call("set_LocalScale", dummy_scale)
-							end
-						end
-
-						if state.last_move_timer and os.clock() - state.last_move_timer > 0.25 then
-							state.last_move_timer = nil
-							fn.reset_dummy_pos()
-						end
-					end
-				end
-
-				if game.battleflow and runtime.imgui.tree_node("Stage Display") then
-					runtime.imgui.begin_rect()
-						local vfx_gameobj = game.scene:call("findGameObject(System.String)", "NoParentEffects")
-						if vfx_gameobj then
-							local changed, enabled = runtime.imgui.checkbox("Fighter VFX", vfx_gameobj:get_DrawSelf())
-							if changed then  vfx_gameobj:set_DrawSelf(enabled) end
-						end
-
-						local stage_id = string.format("%04d", game.battleflow.m_desc.Stage.StageId * 0.01)
-						local names = {"Env", "Light", "VFX", "Level", "High"}
-
-						for i, name in ipairs(names) do
-							local folder = game.scene:call("findFolder", "ess"..stage_id..((name=="High") and "_00v_" or "_00_")..name)
-							if folder then
-								local changed, enabled = runtime.imgui.checkbox(name, folder:get_DrawSelf())
-								if changed then  folder:set_DrawSelf(enabled) end
-								local bb = (name=="Env" and enabled) and game.scene:call("findFolder", "BillboardCrowd")
-								if bb and not runtime.imgui.same_line() then
-									changed, enabled = runtime.imgui.checkbox("BillboardCrowd", bb:get_DrawSelf())
-									if changed then  bb:set_DrawSelf(enabled) end
-								end
-							end
-						end
-					runtime.imgui.end_rect(2)
-					runtime.imgui.tree_pop()
-				end
-
-				for i=2, 1, -1 do
-					local name = "P"..(i==2 and 1 or 2)
-					runtime.imgui.push_id(name)
-						state.changed, sf6.sf6_data["show_"..name] = runtime.imgui.checkbox("", sf6.sf6_data["show_"..name])
-						if state.changed then
-							for m, mesh in ipairs(fn.lua_get_system_array(fn.getC(sf6.players[i], "app.PlayerBehavior", true).mpMeshes) or {}) do
-								mesh:call("set_Enabled", sf6.sf6_data["show_"..name])
-							end
-						end
-						runtime.imgui.same_line()
-
+				for i = 2, 1, -1 do
+					local player = sf6.players[i]
+					local name = "P" .. (i == 2 and 1 or 2)
+					if player then
+						runtime.imgui.push_id(name)
 						if runtime.imgui.tree_node(name) then
 							runtime.imgui.begin_rect()
-								local xform, changed1, changed2 = sf6.players[i]:get_GameObject():get_Transform(), nil, nil
-								if sf6.movechars_on then
-									changed1, sf6.sf6_data[name.."_pos"] = runtime.imgui.drag_float3(name.." Position", xform:call("get_Position"), 0.01, -10000, 10000)
-									changed2, sf6.sf6_data[name.."_rot"] = runtime.imgui.drag_float3(name.." Rotation", xform:call("get_EulerAngle"), 0.01, -360, 360)
-								end
-								state.changed, sf6.sf6_data[name.."_scale"] = runtime.imgui.drag_float(name.." Scale", sf6.sf6_data[name.."_scale"], 0.001, 0.01, 50.0)
-								if state.changed then
-									xform:set_LocalScale(runtime.Vector3f.new(sf6.sf6_data[name.."_scale"], sf6.sf6_data[name.."_scale"], sf6.sf6_data[name.."_scale"]))
-								end
-								if changed1 or changed2 then
-									sf6.frozen_funcs[i] = function()
-										if not pcall(function()
-											xform:set_Position(sf6.sf6_data[name.."_pos"])
-											xform:set_EulerAngle(sf6.sf6_data[name.."_rot"])
-										end) then
-											sf6.frozen_funcs = {}
-										end
-									end
-								end
-
-								sf6.tps_dummy = (sf6.tps_dummy and sf6.tps_dummy.xform:get_Valid() and camera.dummy == sf6.tps_dummy) and sf6.tps_dummy
-
-								if runtime.imgui.button(name.." Third Person") then
-									state.do_third_person = true
-									state.mot_fn = function()
-										settings.freecam_settings.do_lookat = true
-										if not sf6.tps_dummy then
-											local gameobj = game.scene:call("findGameObject(System.String)", "TPSGizmo")
-											sf6.tps_dummy = {gameobj = gameobj or runtime.sdk.find_type_definition("via.GameObject"):get_method("create(System.String)"):call(nil, "TPSGizmo"):add_ref()}
-											sf6.tps_dummy.xform = sf6.tps_dummy.gameobj:get_Transform()
-										end
-										sf6.tps_dummy.xform:set_ParentJoint(sf6.tps_parent_joint_name or "C_Move")
-										sf6.tps_dummy.xform:set_Parent(xform)
-										local pos = xform:getJointByName("C_Hip"):get_Position()
-										sf6.tps_dummy.xform:set_Position(runtime.Vector3f.new(pos.x, pos.y+0.25, pos.z))
-										sf6.tps_mount = (sf6.tps_mount and sf6.tps_mount.xform:get_Valid()) and sf6.tps_mount
-										if not sf6.tps_mount then
-											local gameobj = game.scene:call("findGameObject(System.String)", "TPSMount")
-											sf6.tps_mount = {gameobj = gameobj or runtime.sdk.find_type_definition("via.GameObject"):get_method("create(System.String)"):call(nil, "TPSMount"):add_ref()}
-											sf6.tps_mount.xform = sf6.tps_mount.gameobj:get_Transform()
-										end
-										sf6.tps_mount.xform:set_Parent(sf6.tps_dummy.xform)
-										local wm = xform:get_WorldMatrix()
-										wm[3] = wm[3] + (wm[2]*-2.5)
-										sf6.tps_mount.xform:set_Position(runtime.Vector3f.new(wm[3].x, wm[3].y+1.5, wm[3].z+0.5))
-										camera.dummy = sf6.tps_dummy
-										sf6.tps_mount.cam_attached = true
-										camera.cam_attached = sf6.tps_mount
-										camera.attached_children[sf6.tps_mount.xform] = {}
-										camera.do_cam_orbit = true
-										fn.move_to_light(sf6.tps_mount)
-										fn.reset_dummy_pos(false, true)
-									end
-								end
-								fn.tooltip("Creates a gizmo for orbiting on the fighter's hip and mounts the camera to it.\nWhile orbiting, use the mouse to rotate and hold "..runtime.hk.hotkeys.CModifier3.." + use the standard camera and zoom controls to manipulate position and distance to center")
-
-								if sf6.tps_mount and camera.cam_attached and camera.cam_attached.xform == sf6.tps_mount.xform then --and not imgui.same_line() then
-									--changed, freecam_settings.tps_unlocked = imgui.checkbox("Unlocked", freecam_settings.tps_unlocked)
-									--tooltip("Hold ALT to lock/unlock")
-									local bone_names = {}
-									for i, bone in ipairs(fn.lua_get_system_array(xform:get_Joints())) do
-										bone_names[i] = bone:get_Name()
-									end
-									state.changed, sf6.sf6_data.tps_parent_joint_name_idx = runtime.imgui.combo("Parent joint", sf6.sf6_data.tps_parent_joint_name_idx, bone_names)
-									if state.changed then
-										sf6.tps_parent_joint_name = bone_names[sf6.sf6_data.tps_parent_joint_name_idx]
-										sf6.tps_dummy.xform:set_ParentJoint()
-									end
-								end
-
-								if sf6.players[i].mpFace and runtime.imgui.tree_node(name.." Facial Animation") then
-
-									local layer0 = sf6.players[i].mpFace:getLayer(0)
-									local layer1 = sf6.players[i].mpFace:getLayer(1)
-									local mnode = layer0:get_HighestWeightMotionNode()
-									local mname = mnode and mnode:get_MotionName()
-									local player_id = sf6.players[i]:get_GameObject():get_Name():match("esf(.+)v")
-									settings.freecam_settings.sf6_anims = settings.freecam_settings.sf6_anims or {}
-									settings.freecam_settings.sf6_anims[player_id] = settings.freecam_settings.sf6_anims[player_id] or {}
-									sf6.sf6_data.anim_names[player_id] = sf6.sf6_data.anim_names[player_id] or {}
-									if not sf6.sf6_data.anim_names[player_id][1] then
-										for name, tbl in pairs(settings.freecam_settings.sf6_anims[player_id]) do table.insert(sf6.sf6_data.anim_names[player_id], name) end
-										table.sort(sf6.sf6_data.anim_names[player_id], function(a, b) return a < b end)
-									end
-
-									runtime.imgui.same_line()
-									runtime.imgui.text_colored(mname, 0xFFE0853D)
-
-									state.changed, sf6.players[i]._Facial._IsEnable = runtime.imgui.checkbox("Action System", sf6.players[i]._Facial._IsEnable, 0.0, 1.0)
-									fn.tooltip("Changes facial animations based on the current move\nLeave this on unless the game is not letting you seek in an animation")
-
-									state.changed, sf6.sf6_data[name.."_animated_face"] = runtime.imgui.slider_float("Animation Rate", layer1:get_BlendRate(), 0.0, 1.0)
-									if state.changed then
-										layer1:set_BlendRate(sf6.sf6_data[name.."_animated_face"])
-									end
-
-									state.changed, sf6.sf6_data[name.."_face_motbank"] = runtime.imgui.drag_int("MotionBankID", layer0:get_MotionBankID(), 1, 0, 10000)
-									if state.changed then
-										layer0:set_MotionBankID(sf6.sf6_data[name.."_face_motbank"])
-									end
-
-									state.changed, sf6.sf6_data[name.."_face_motion"] = runtime.imgui.drag_int("MotionID", layer0:get_MotionID(), 1, 0, 10000)
-									if state.changed then
-										layer0:set_MotionID(sf6.sf6_data[name.."_face_motion"])
-									end
-									fn.tooltip("An animation is a MotionID within a MotionBankID")
-
-									if mname and not settings.freecam_settings.sf6_anims[player_id][mname] then
-										settings.freecam_settings.sf6_anims[player_id][mname] = {bank=sf6.sf6_data[name.."_face_motbank"], mot=sf6.sf6_data[name.."_face_motion"]}
-										table.insert(sf6.sf6_data.anim_names[player_id], mname)
-										table.sort(sf6.sf6_data.anim_names[player_id], function(a, b) return a < b end)
-										state.was_changed = true
-									end
-
-									state.changed, sf6.sf6_data[name.."_select_anim_idx"] = runtime.imgui.combo("Select Anim", fn.find_index(sf6.sf6_data.anim_names[player_id], mname), sf6.sf6_data.anim_names[player_id])
-									if state.changed then
-										local old_speed = layer0:get_Speed()
-										layer0:set_Speed(1000.0)
-										local new_mot_name = sf6.sf6_data.anim_names[player_id][sf6.sf6_data[name.."_select_anim_idx"] ]
-										local tbl = settings.freecam_settings.sf6_anims[player_id][new_mot_name]
-										layer0:set_MotionBankID(tbl.bank)
-										layer0:set_MotionID(tbl.mot)
-										layer0:set_WrapMode(2) --loop
-										state.mot_fn = function()
-											layer0:set_Frame(0)
-											layer0:set_Speed(old_speed)
-										end
-									end
-
-									state.changed, sf6.sf6_data[name.."_animation_frame"] = runtime.imgui.slider_float("Frame", layer0:get_Frame(), 0, layer0:get_EndFrame())
-									if state.changed then
-										state.mot_fn = function() layer1:set_Frame(sf6.sf6_data[name.."_animation_frame"]) end
-									end
-
-									state.changed, sf6.sf6_data[name.."_animation_speed"] = runtime.imgui.slider_float("Speed", layer0:get_Speed(), 0, 1)
-									if state.changed then
-										state.mot_fn = function() layer0:set_Speed(sf6.sf6_data[name.."_animation_speed"]) end
-									end
-
-									runtime.imgui.tree_pop()
-								end
-
-								if runtime.EMV then
-									local go = game.held_transforms[xform] or runtime.EMV.GameObject:new{xform=xform}
-									if runtime.imgui.tree_node("EMV Viewer") then
-										draw_filtered_anim_object_viewer(runtime, game, fn, go, {
-											transform = false,
-											hierarchy = true,
-											motion = false,
-											action_monitor = false,
-											materials = true,
-										})
-										runtime.imgui.tree_pop()
-									end
-								end
+							if runtime.EMV then
+								local player_xform = player:get_GameObject():get_Transform()
+								draw_player_material_children(runtime, game, player_xform)
+							end
 							runtime.imgui.end_rect(2)
 							runtime.imgui.tree_pop()
 						end
-					runtime.imgui.pop_id()
+						runtime.imgui.pop_id()
+					end
 				end
 				runtime.imgui.end_rect(2)
 				runtime.imgui.tree_pop()
