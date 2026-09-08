@@ -645,36 +645,13 @@ local function calculateLookQuaternion(pitch, yaw, roll)
 end
 
 local freecam_ui_tree_yaml = [[
-Lua FreeCam v1.9.0:
-  Enable FreeCam:
-  Hide UI:
-  2x Quality:
-  Freeze Time & Scene:
-  Orthographic Cam:
-  Enable Cam Light:
-  Cam Light Settings:
-  Quick Zoom:
-  Mount Camera:
-  Camera Controls:
-  Hotkeys:
-  Visual Settings:
-    Camera:
-    SweetLight:
-    LightProbes:
-    Scene Layer:
-  SF6 Tools:
-    Graphics:
-    Stage Display:
-    P1:
-      Transform:
-      Third Person:
-      Facial Animation:
-      EMV Viewer:
-    P2:
-      Transform:
-      Third Person:
-      Facial Animation:
-      EMV Viewer:
+SF6 Color Editor:
+  P1:
+    esf<character code>:
+    Materials:
+  P2:
+    esf<character code>:
+    Materials:
 ]]
 
 local function parse_freecam_ui_tree(yaml)
@@ -718,7 +695,7 @@ local function draw_freecam_ui_node(node, callbacks, context)
 	end
 end
 
-local install_freecam_callbacks = require("callbacks")
+local freecam_callbacks = require("callbacks")
 
 local freecam_callback_context
 
@@ -1100,13 +1077,19 @@ end
 
 function display_freecam()
 	was_changed = false
-	local callbacks = {}
 	freecam_callback_context = freecam_callback_context or create_freecam_callback_context()
 	local context = freecam_callback_context
 	context.sync_from_freecam()
 	context.active = true
 
-	install_freecam_callbacks(callbacks, context)
+	-- Explicitly map each YAML section to the callback that renders it.
+	local callbacks = {
+		["SF6 Color Editor"] = freecam_callbacks.draw_sf6_color_editor,
+		["P1"] = freecam_callbacks.draw_player_one,
+		["P2"] = freecam_callbacks.draw_player_two,
+		["esf<character code>"] = freecam_callbacks.draw_character_name,
+		["Materials"] = freecam_callbacks.draw_materials,
+	}
 	draw_freecam_ui_node(freecam_ui_tree, callbacks, context)
 	context.active = false
 	context.sync_to_freecam()
