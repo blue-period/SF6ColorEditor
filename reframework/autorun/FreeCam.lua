@@ -88,7 +88,7 @@ local movestage_only_lights = false
 local frameskip = false
 local cam_frozen = false
 local use_orthographic = false
-local changed, was_changed, stage_change, freecam_changed
+local changed, stage_change, freecam_changed
 local cam_joint
 local cam_gameobj, cam_xform
 local kb, mouse, pad
@@ -644,459 +644,47 @@ local function calculateLookQuaternion(pitch, yaw, roll)
 	return qToReturn:normalized()
 end
 
-local freecam_ui_tree_yaml = [[
-SF6 Color Editor:
-  P1:
-    esf<character code>:
-    Materials:
-  P2:
-    esf<character code>:
-    Materials:
-]]
+local sf6_color_editor_callbacks = require("callbacks")
 
-local function parse_freecam_ui_tree(yaml)
-	local root = { name = "__root", children = {}, depth = -1 }
-	local stack = { [0] = root }
+local sf6_color_editor_context
 
-	for line in yaml:gmatch("[^\r\n]+") do
-		local indent, name = line:match("^(%s*)(.-):%s*$")
-		if name and name ~= "" then
-			local depth = math.floor(#indent / 2)
-			local node = { name = name, children = {}, depth = depth }
-			local parent = stack[depth] or root
-			table.insert(parent.children, node)
-			stack[depth + 1] = node
-
-			for i = depth + 2, #stack do
-				stack[i] = nil
-			end
-		end
-	end
-
-	return root.children[1]
-end
-
-local freecam_ui_tree = parse_freecam_ui_tree(freecam_ui_tree_yaml)
-
-local function draw_freecam_ui_node(node, callbacks, context)
-	if not node then return end
-
-	local callback = callbacks[node.name]
-	local draw_children = function()
-		for _, child in ipairs(node.children) do
-			draw_freecam_ui_node(child, callbacks, context)
-		end
-	end
-
-	if callback then
-		callback(node, draw_children, context)
-	else
-		draw_children()
-	end
-end
-
-local freecam_callbacks = require("callbacks")
-
-local freecam_callback_context
-
--- Callbacks own their UI-facing values; these sync points bridge the existing frame hooks.
-local function create_freecam_callback_context()
-	local context = {
-		state = {
-			cc_factors = cc_factors,
-			cc_item = cc_item,
-			cc_on = cc_on,
-			changed = changed,
-			constant_fn = constant_fn,
-			contrast = contrast,
-			disable_all_efx = disable_all_efx,
-			disable_all_lights = disable_all_lights,
-			display_mode = display_mode,
-			do_force_shadow_bias = do_force_shadow_bias,
-			do_remember = do_remember,
-			do_third_person = do_third_person,
-			dof_on = dof_on,
-			dof_options = dof_options,
-			ev_value = ev_value,
-			filter_on = filter_on,
-			freecam_changed = freecam_changed,
-			freecam_light_enabled = freecam_light_enabled,
-			freecam_on = freecam_on,
-			frozenFOV = frozenFOV,
-			frozen_scene = frozen_scene,
-			graphics_settings_mgr = graphics_settings_mgr,
-			greenscreen_on = greenscreen_on,
-			gs_color = gs_color,
-			hi_quality = hi_quality,
-			hud_disabled = hud_disabled,
-			is_constant = is_constant,
-			is_drawing_freecam_ui = is_drawing_freecam_ui,
-			last_move_timer = last_move_timer,
-			mot_fn = mot_fn,
-			orig_render_output_id = orig_render_output_id,
-			rt_enabled = rt_enabled,
-			rt_reflections_enabled = rt_reflections_enabled,
-			show_cam_lights = show_cam_lights,
-			softbloom_on = softbloom_on,
-			ssao_intensity = ssao_intensity,
-			ssao_on = ssao_on,
-			ssao_tint = ssao_tint,
-			stage_rot_func = stage_rot_func,
-			temp_fn = temp_fn,
-			temp_fns = temp_fns,
-			temporal_ssao = temporal_ssao,
-			txt = txt,
-			use_frozen_fov = use_frozen_fov,
-			use_orthographic = use_orthographic,
-			vignette_on = vignette_on,
-			vol_on = vol_on,
-			was_changed = was_changed,
-		},
-		camera = {
-			attached_children = attached_children,
-			cam = cam,
-			cam_attached = cam_attached,
-			cam_gameobj = cam_gameobj,
-			cam_light = cam_light,
-			cam_lights = cam_lights,
-			cam_lights_map = cam_lights_map,
-			cam_xform = cam_xform,
-			do_cam_orbit = do_cam_orbit,
-			dummy = dummy,
-			last_camera_matrix = last_camera_matrix,
-			last_mouse_pos = last_mouse_pos,
-			last_pos_and_rot = last_pos_and_rot,
-			pos_before_teleport = pos_before_teleport,
-			sceneview = sceneview,
-		},
-		lighting = {
-			all_lights = all_lights,
-			cached_lightprobes = cached_lightprobes,
-		},
-		sf6 = {
-			distortion_on = distortion_on,
-			frozen_funcs = frozen_funcs,
-			movechars_on = movechars_on,
-			movelights_on = movelights_on,
-			movestage_on = movestage_on,
-			movestage_only_lights = movestage_only_lights,
-			players = players,
-			sf6_data = sf6_data,
-			tps_dummy = tps_dummy,
-			tps_mount = tps_mount,
-			tps_parent_joint_name = tps_parent_joint_name,
-		},
-		settings = {
-			default_settings = default_settings,
-			freecam_settings = freecam_settings,
-		},
-		ui = {
-			filter_options = filter_options,
-			imgui_data = imgui_data,
-			lightconfig_names = lightconfig_names,
-			lightconfigs_glob = lightconfigs_glob,
-			mount_obj_jname = mount_obj_jname,
-			mount_obj_name = mount_obj_name,
-			mounting_fn = mounting_fn,
-		},
-		game = {
-			battleflow = battleflow,
-			can_rt = can_rt,
-			candela_multi = candela_multi,
-			display_type_names = display_type_names,
-			held_transforms = held_transforms,
-			isDMC = isDMC,
-			isMHR = isMHR,
-			isRE3 = isRE3,
-			isRE7 = isRE7,
-			isRE8 = isRE8,
-			isSF6 = isSF6,
-			scene = scene,
-			scene_mgr_typedef = scene_mgr_typedef,
-			should_expand_cam_lights_menu = should_expand_cam_lights_menu,
-		},
+local function create_sf6_color_editor_context()
+	return {
+		is_sf6 = isSF6,
+		players = players,
+		held_transforms = held_transforms,
 		runtime = {
 			EMV = EMV,
-			Quaternion = Quaternion,
-			Vector3f = Vector3f,
-			hk = hk,
 			imgui = imgui,
 			json = json,
 			re = re,
-			reframework = reframework,
 			sdk = sdk,
 		},
-		functions = {
-			apply_shadow_bias = apply_shadow_bias,
-			attach_detach = attach_detach,
-			change_player_mat_params = change_player_mat_params,
-			change_quality = change_quality,
-			create_new_cam_light = create_new_cam_light,
-			create_or_toggle_cam_light = create_or_toggle_cam_light,
-			create_resource = create_resource,
-			dump_settings = dump_settings,
-			find_index = find_index,
-			getC = getC,
-			get_mouse_pos = get_mouse_pos,
-			light_lookat_fn = light_lookat_fn,
-			lua_get_system_array = lua_get_system_array,
-			managed_object_control_panel = managed_object_control_panel,
-			move_light_by_dummy_independently = move_light_by_dummy_independently,
-			move_to_light = move_to_light,
-			recurse_def_settings = recurse_def_settings,
-			reset_dummy_pos = reset_dummy_pos,
-			setup_stage_attach = setup_stage_attach,
-			tooltip = tooltip,
-		},
+		activate_ui = function()
+			is_drawing_freecam_ui = true
+			graphics_settings_mgr = isSF6 and sdk.get_managed_singleton("app.GraphicsSettingsManager")
+		end,
 	}
-
-	function context.sync_to_freecam()
-		cc_factors = context.state.cc_factors
-		cc_item = context.state.cc_item
-		cc_on = context.state.cc_on
-		changed = context.state.changed
-		constant_fn = context.state.constant_fn
-		contrast = context.state.contrast
-		disable_all_efx = context.state.disable_all_efx
-		disable_all_lights = context.state.disable_all_lights
-		display_mode = context.state.display_mode
-		do_force_shadow_bias = context.state.do_force_shadow_bias
-		do_remember = context.state.do_remember
-		do_third_person = context.state.do_third_person
-		dof_on = context.state.dof_on
-		dof_options = context.state.dof_options
-		ev_value = context.state.ev_value
-		filter_on = context.state.filter_on
-		freecam_changed = context.state.freecam_changed
-		freecam_light_enabled = context.state.freecam_light_enabled
-		freecam_on = context.state.freecam_on
-		frozenFOV = context.state.frozenFOV
-		frozen_scene = context.state.frozen_scene
-		graphics_settings_mgr = context.state.graphics_settings_mgr
-		greenscreen_on = context.state.greenscreen_on
-		gs_color = context.state.gs_color
-		hi_quality = context.state.hi_quality
-		hud_disabled = context.state.hud_disabled
-		is_constant = context.state.is_constant
-		is_drawing_freecam_ui = context.state.is_drawing_freecam_ui
-		last_move_timer = context.state.last_move_timer
-		mot_fn = context.state.mot_fn
-		orig_render_output_id = context.state.orig_render_output_id
-		rt_enabled = context.state.rt_enabled
-		rt_reflections_enabled = context.state.rt_reflections_enabled
-		show_cam_lights = context.state.show_cam_lights
-		softbloom_on = context.state.softbloom_on
-		ssao_intensity = context.state.ssao_intensity
-		ssao_on = context.state.ssao_on
-		ssao_tint = context.state.ssao_tint
-		stage_rot_func = context.state.stage_rot_func
-		temp_fn = context.state.temp_fn
-		temp_fns = context.state.temp_fns
-		temporal_ssao = context.state.temporal_ssao
-		txt = context.state.txt
-		use_frozen_fov = context.state.use_frozen_fov
-		use_orthographic = context.state.use_orthographic
-		vignette_on = context.state.vignette_on
-		vol_on = context.state.vol_on
-		was_changed = context.state.was_changed
-		attached_children = context.camera.attached_children
-		cam = context.camera.cam
-		cam_attached = context.camera.cam_attached
-		cam_gameobj = context.camera.cam_gameobj
-		cam_light = context.camera.cam_light
-		cam_lights = context.camera.cam_lights
-		cam_lights_map = context.camera.cam_lights_map
-		cam_xform = context.camera.cam_xform
-		do_cam_orbit = context.camera.do_cam_orbit
-		dummy = context.camera.dummy
-		last_camera_matrix = context.camera.last_camera_matrix
-		last_mouse_pos = context.camera.last_mouse_pos
-		last_pos_and_rot = context.camera.last_pos_and_rot
-		pos_before_teleport = context.camera.pos_before_teleport
-		sceneview = context.camera.sceneview
-		all_lights = context.lighting.all_lights
-		cached_lightprobes = context.lighting.cached_lightprobes
-		distortion_on = context.sf6.distortion_on
-		frozen_funcs = context.sf6.frozen_funcs
-		movechars_on = context.sf6.movechars_on
-		movelights_on = context.sf6.movelights_on
-		movestage_on = context.sf6.movestage_on
-		movestage_only_lights = context.sf6.movestage_only_lights
-		players = context.sf6.players
-		sf6_data = context.sf6.sf6_data
-		tps_dummy = context.sf6.tps_dummy
-		tps_mount = context.sf6.tps_mount
-		tps_parent_joint_name = context.sf6.tps_parent_joint_name
-		default_settings = context.settings.default_settings
-		freecam_settings = context.settings.freecam_settings
-		filter_options = context.ui.filter_options
-		imgui_data = context.ui.imgui_data
-		lightconfig_names = context.ui.lightconfig_names
-		lightconfigs_glob = context.ui.lightconfigs_glob
-		mount_obj_jname = context.ui.mount_obj_jname
-		mount_obj_name = context.ui.mount_obj_name
-		mounting_fn = context.ui.mounting_fn
-		battleflow = context.game.battleflow
-		can_rt = context.game.can_rt
-		candela_multi = context.game.candela_multi
-		display_type_names = context.game.display_type_names
-		held_transforms = context.game.held_transforms
-		isDMC = context.game.isDMC
-		isMHR = context.game.isMHR
-		isRE3 = context.game.isRE3
-		isRE7 = context.game.isRE7
-		isRE8 = context.game.isRE8
-		isSF6 = context.game.isSF6
-		scene = context.game.scene
-		scene_mgr_typedef = context.game.scene_mgr_typedef
-		should_expand_cam_lights_menu = context.game.should_expand_cam_lights_menu
-	end
-
-	function context.sync_from_freecam()
-		context.state.cc_factors = cc_factors
-		context.state.cc_item = cc_item
-		context.state.cc_on = cc_on
-		context.state.changed = changed
-		context.state.constant_fn = constant_fn
-		context.state.contrast = contrast
-		context.state.disable_all_efx = disable_all_efx
-		context.state.disable_all_lights = disable_all_lights
-		context.state.display_mode = display_mode
-		context.state.do_force_shadow_bias = do_force_shadow_bias
-		context.state.do_remember = do_remember
-		context.state.do_third_person = do_third_person
-		context.state.dof_on = dof_on
-		context.state.dof_options = dof_options
-		context.state.ev_value = ev_value
-		context.state.filter_on = filter_on
-		context.state.freecam_changed = freecam_changed
-		context.state.freecam_light_enabled = freecam_light_enabled
-		context.state.freecam_on = freecam_on
-		context.state.frozenFOV = frozenFOV
-		context.state.frozen_scene = frozen_scene
-		context.state.graphics_settings_mgr = graphics_settings_mgr
-		context.state.greenscreen_on = greenscreen_on
-		context.state.gs_color = gs_color
-		context.state.hi_quality = hi_quality
-		context.state.hud_disabled = hud_disabled
-		context.state.is_constant = is_constant
-		context.state.is_drawing_freecam_ui = is_drawing_freecam_ui
-		context.state.last_move_timer = last_move_timer
-		context.state.mot_fn = mot_fn
-		context.state.orig_render_output_id = orig_render_output_id
-		context.state.rt_enabled = rt_enabled
-		context.state.rt_reflections_enabled = rt_reflections_enabled
-		context.state.show_cam_lights = show_cam_lights
-		context.state.softbloom_on = softbloom_on
-		context.state.ssao_intensity = ssao_intensity
-		context.state.ssao_on = ssao_on
-		context.state.ssao_tint = ssao_tint
-		context.state.stage_rot_func = stage_rot_func
-		context.state.temp_fn = temp_fn
-		context.state.temp_fns = temp_fns
-		context.state.temporal_ssao = temporal_ssao
-		context.state.txt = txt
-		context.state.use_frozen_fov = use_frozen_fov
-		context.state.use_orthographic = use_orthographic
-		context.state.vignette_on = vignette_on
-		context.state.vol_on = vol_on
-		context.state.was_changed = was_changed
-		context.camera.attached_children = attached_children
-		context.camera.cam = cam
-		context.camera.cam_attached = cam_attached
-		context.camera.cam_gameobj = cam_gameobj
-		context.camera.cam_light = cam_light
-		context.camera.cam_lights = cam_lights
-		context.camera.cam_lights_map = cam_lights_map
-		context.camera.cam_xform = cam_xform
-		context.camera.do_cam_orbit = do_cam_orbit
-		context.camera.dummy = dummy
-		context.camera.last_camera_matrix = last_camera_matrix
-		context.camera.last_mouse_pos = last_mouse_pos
-		context.camera.last_pos_and_rot = last_pos_and_rot
-		context.camera.pos_before_teleport = pos_before_teleport
-		context.camera.sceneview = sceneview
-		context.lighting.all_lights = all_lights
-		context.lighting.cached_lightprobes = cached_lightprobes
-		context.sf6.distortion_on = distortion_on
-		context.sf6.frozen_funcs = frozen_funcs
-		context.sf6.movechars_on = movechars_on
-		context.sf6.movelights_on = movelights_on
-		context.sf6.movestage_on = movestage_on
-		context.sf6.movestage_only_lights = movestage_only_lights
-		context.sf6.players = players
-		context.sf6.sf6_data = sf6_data
-		context.sf6.tps_dummy = tps_dummy
-		context.sf6.tps_mount = tps_mount
-		context.sf6.tps_parent_joint_name = tps_parent_joint_name
-		context.settings.default_settings = default_settings
-		context.settings.freecam_settings = freecam_settings
-		context.ui.filter_options = filter_options
-		context.ui.imgui_data = imgui_data
-		context.ui.lightconfig_names = lightconfig_names
-		context.ui.lightconfigs_glob = lightconfigs_glob
-		context.ui.mount_obj_jname = mount_obj_jname
-		context.ui.mount_obj_name = mount_obj_name
-		context.ui.mounting_fn = mounting_fn
-		context.game.battleflow = battleflow
-		context.game.can_rt = can_rt
-		context.game.candela_multi = candela_multi
-		context.game.display_type_names = display_type_names
-		context.game.held_transforms = held_transforms
-		context.game.isDMC = isDMC
-		context.game.isMHR = isMHR
-		context.game.isRE3 = isRE3
-		context.game.isRE7 = isRE7
-		context.game.isRE8 = isRE8
-		context.game.isSF6 = isSF6
-		context.game.scene = scene
-		context.game.scene_mgr_typedef = scene_mgr_typedef
-		context.game.should_expand_cam_lights_menu = should_expand_cam_lights_menu
-	end
-
-	local function bind_stateful(func)
-		return function(...)
-			-- Immediate UI calls must publish pending context edits before invoking FreeCam helpers.
-			if context.active then
-				context.sync_to_freecam()
-			end
-			local results = table.pack(func(...))
-			context.sync_from_freecam()
-			return table.unpack(results, 1, results.n)
-		end
-	end
-
-	context.functions.change_quality = bind_stateful(change_quality)
-	context.functions.create_new_cam_light = bind_stateful(create_new_cam_light)
-	context.functions.create_or_toggle_cam_light = bind_stateful(create_or_toggle_cam_light)
-	context.functions.move_to_light = bind_stateful(move_to_light)
-	context.functions.reset_dummy_pos = bind_stateful(reset_dummy_pos)
-	context.functions.setup_stage_attach = bind_stateful(setup_stage_attach)
-	return context
 end
 
-function display_freecam()
-	was_changed = false
-	freecam_callback_context = freecam_callback_context or create_freecam_callback_context()
-	local context = freecam_callback_context
-	context.sync_from_freecam()
-	context.active = true
+function display_sf6_color_editor()
+	sf6_color_editor_context = sf6_color_editor_context or create_sf6_color_editor_context()
+	local context = sf6_color_editor_context
 
-	-- Explicitly map each YAML section to the callback that renders it.
-	local callbacks = {
-		["SF6 Color Editor"] = freecam_callbacks.draw_sf6_color_editor,
-		["P1"] = freecam_callbacks.draw_player_one,
-		["P2"] = freecam_callbacks.draw_player_two,
-		["esf<character code>"] = freecam_callbacks.draw_character_name,
-		["Materials"] = freecam_callbacks.draw_materials,
-	}
-	draw_freecam_ui_node(freecam_ui_tree, callbacks, context)
-	context.active = false
-	context.sync_to_freecam()
+	sf6_color_editor_callbacks.draw_sf6_color_editor(context, function()
+		sf6_color_editor_callbacks.draw_player_one(context, function()
+			sf6_color_editor_callbacks.draw_character_name(context)
+			sf6_color_editor_callbacks.draw_materials(context)
+		end)
+		sf6_color_editor_callbacks.draw_player_two(context, function()
+			sf6_color_editor_callbacks.draw_character_name(context)
+			sf6_color_editor_callbacks.draw_materials(context)
+		end)
+	end)
 end
 
 re.on_draw_ui(function()
-	display_freecam()
+	display_sf6_color_editor()
 end)
 
 re.on_application_entry("UpdateHID", function()
