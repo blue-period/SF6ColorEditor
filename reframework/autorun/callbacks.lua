@@ -195,8 +195,6 @@ end
 local function draw_sf6_color_editor(context, draw_players)
 	local runtime = context.runtime
 
-	context.activate_ui()
-
 	if context.is_sf6 and context.players[2] then
 		if runtime.imgui.tree_node("SF6 Color Editor") then
 			runtime.imgui.begin_rect()
