@@ -117,7 +117,22 @@ end
 local function save_cmd_for_children(children, path, context)
 	local real_path = path:gsub("^reframework/data/", "")
 	if not UserFile then return end
-	local file = UserFile:new{filepath=real_path}
+
+	-- Always use the CMD referenced by the live color controller as the
+	-- template.  That is the base-game resource Capcom keeps current; `path`
+	-- is only the destination and may point at an older file supplied by a mod.
+	local template_path = default_cmd_path(children[1], context)
+	local template_real_path = template_path:gsub("^reframework/data/", "")
+	if template_real_path == "" or not BitStream.checkFileExists(template_real_path) then
+		context.runtime.re.msg("Could not find the current base-game CMD template:\n" .. template_path)
+		return
+	end
+
+	local file = UserFile:new{filepath=template_real_path}
+	if not file.RSZ or not file.RSZ.objects or not file.RSZ.objects[1] then
+		context.runtime.re.msg("Could not read the current base-game CMD template:\n" .. template_path)
+		return
+	end
 	local saved = false
 	for _, child in ipairs(children) do
 		if child.materials and child.materials.is_cmd then
@@ -125,7 +140,9 @@ local function save_cmd_for_children(children, path, context)
 			child.materials.UserFile = file
 		end
 	end
-	if saved then context.runtime.re.msg("Saved CMD changes for all objects to:\n" .. real_path) end
+	if saved then
+		context.runtime.re.msg("Saved CMD changes for all objects to:\n" .. real_path .. "\n\nTemplate:\n" .. template_real_path)
+	end
 end
 
 local function draw_player_material_controls(children, context, player_name)
