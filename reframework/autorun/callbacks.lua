@@ -210,7 +210,7 @@ local function draw_sf6_color_editor(context, draw_players)
 	end
 end
 
-local function draw_player(context, player_index, player_name, draw_character_materials)
+local function draw_player(context, player_index, player_name, draw_materials)
 	local player = context.players[player_index]
 	if not player then return end
 
@@ -232,7 +232,7 @@ local function draw_player(context, player_index, player_name, draw_character_ma
 			for _, child in ipairs(children) do
 				if child then
 					context.active_sf6_material_child = child
-					draw_character_materials()
+				draw_materials()
 				end
 			end
 			context.active_sf6_material_child = nil
@@ -243,38 +243,30 @@ local function draw_player(context, player_index, player_name, draw_character_ma
 	runtime.imgui.pop_id()
 end
 
-local function draw_player_one(context, draw_character_materials)
-	draw_player(context, 2, "P1", draw_character_materials)
+local function draw_player_one(context, draw_materials)
+	draw_player(context, 2, "P1", draw_materials)
 end
 
-local function draw_player_two(context, draw_character_materials)
-	draw_player(context, 1, "P2", draw_character_materials)
-end
-
-local function draw_character_name(context)
-	local child = context.active_sf6_material_child
-	if child then
-		local imgui = context.runtime.imgui
-		context.sf6_material_node_open = imgui.tree_node_ptr_id(child.mesh or child.xform, child.name or "Object")
-	end
+local function draw_player_two(context, draw_materials)
+	draw_player(context, 1, "P2", draw_materials)
 end
 
 local function draw_materials(context)
 	local child = context.active_sf6_material_child
-	local runtime = context.runtime
-	if child and child.materials and context.sf6_material_node_open then
+	if not child or not child.materials then return end
+
+	local imgui = context.runtime.imgui
+	if imgui.tree_node_ptr_id(child.mesh or child.xform, child.name or "Object") then
 		for _, material in ipairs(child.materials) do
 			material:draw_imgui_mat()
 		end
-		runtime.imgui.tree_pop()
+		imgui.tree_pop()
 	end
-	context.sf6_material_node_open = nil
 end
 
 return {
 	draw_sf6_color_editor = draw_sf6_color_editor,
 	draw_player_one = draw_player_one,
 	draw_player_two = draw_player_two,
-	draw_character_name = draw_character_name,
 	draw_materials = draw_materials,
 }

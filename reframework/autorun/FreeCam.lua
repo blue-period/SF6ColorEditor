@@ -644,7 +644,7 @@ local function calculateLookQuaternion(pitch, yaw, roll)
 	return qToReturn:normalized()
 end
 
-local sf6_color_editor_callbacks = require("callbacks")
+local ce = require("callbacks")
 
 local sf6_color_editor_context
 
@@ -671,14 +671,12 @@ function display_sf6_color_editor()
 	sf6_color_editor_context = sf6_color_editor_context or create_sf6_color_editor_context()
 	local context = sf6_color_editor_context
 
-	sf6_color_editor_callbacks.draw_sf6_color_editor(context, function()
-		sf6_color_editor_callbacks.draw_player_one(context, function()
-			sf6_color_editor_callbacks.draw_character_name(context)
-			sf6_color_editor_callbacks.draw_materials(context)
+	ce.draw_sf6_color_editor(context, function()
+		ce.draw_player_one(context, function()
+			ce.draw_materials(context)
 		end)
-		sf6_color_editor_callbacks.draw_player_two(context, function()
-			sf6_color_editor_callbacks.draw_character_name(context)
-			sf6_color_editor_callbacks.draw_materials(context)
+		ce.draw_player_two(context, function()
+			ce.draw_materials(context)
 		end)
 	end)
 end
