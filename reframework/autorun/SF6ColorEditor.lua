@@ -1,4 +1,4 @@
-local ce = require("callbacks")
+local ce = require("utils")
 
 local is_sf6 = reframework.get_game_name():sub(1, 3):upper() == "SF6"
 local players = {}
