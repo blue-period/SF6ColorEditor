@@ -145,50 +145,77 @@ local function save_cmd_for_children(children, path, context)
 	end
 end
 
-local function draw_player_material_controls(children, context, player_name)
+local function get_player_material_state(context, player_name, owner)
+	context.sf6_material_ui = context.sf6_material_ui or {}
+	local state = context.sf6_material_ui[player_name] or {}
+	if state.owner ~= owner then
+		state = {owner=owner, children={}}
+	end
+	state.children = state.children or {}
+	context.sf6_material_ui[player_name] = state
+	return state
+end
+
+local function draw_player_material_controls(children, context, player_name, owner)
 	local runtime = context.runtime
 	local imgui = runtime.imgui
+	local state = get_player_material_state(context, player_name, owner)
 	local key = player_name
-	context.sf6_material_ui = context.sf6_material_ui or {}
-	local state = context.sf6_material_ui[key] or {}
 	local first = children[1]
-	local owner = first and (first.name_w_parent or first.name)
-	if state.owner ~= owner then state = {owner=owner} end
-	context.sf6_material_ui[key] = state
-	local target_name = first and first.name or key
 
 	if SettingsCache and SettingsCache.remember_materials and imgui.button("Save New Defaults##" .. key) then
 		save_new_defaults(children, context)
 	end
 
-	if RN and RN.mesh_resource_names and RN.mdf2_resource_names then
-		state.mesh_idx = state.mesh_idx or (first and first.mpaths and runtime.EMV.find_index(RN.mesh_resource_names, first.mpaths.mesh_path)) or 1
-		local changed
-		changed, state.mesh_idx = imgui.combo("Change Mesh " .. target_name .. "##" .. key, state.mesh_idx, RN.mesh_resource_names)
-		if changed then set_mesh_for_children(children, RN.mesh_resource_names[state.mesh_idx], context) end
-
-		state.mdf_idx = state.mdf_idx or (first and first.mpaths and runtime.EMV.find_index(RN.mdf2_resource_names, first.mpaths.mdf2_path)) or 1
-		changed, state.mdf_idx = imgui.combo("Change Materials " .. target_name .. "##" .. key, state.mdf_idx, RN.mdf2_resource_names)
-		if changed then set_materials_for_children(children, RN.mdf2_resource_names[state.mdf_idx], context) end
-	end
-
 	if _G.RE_Resource and BitStream and first and first.materials then
-		state.mdf_path = state.mdf_path or default_mdf_path(first, context)
-		local mdf_exists = state.mdf_path ~= "" and BitStream.checkFileExists(state.mdf_path:gsub("^reframework/data/", ""))
-		if mdf_exists then
-			if imgui.button("Save MDF##" .. key) then save_mdf_for_children(children, state.mdf_path, context) end
-			imgui.same_line()
-		end
-		local changed
-		changed, state.mdf_path = imgui.input_text("Modify MDF File" .. (mdf_exists and "" or " (Does Not Exist)") .. "##" .. key, state.mdf_path)
-
 		state.cmd_path = state.cmd_path or default_cmd_path(first, context)
 		local cmd_exists = state.cmd_path ~= "" and BitStream.checkFileExists(state.cmd_path:gsub("^reframework/data/", ""))
 		if cmd_exists then
 			if imgui.button("Save CMD##" .. key) then save_cmd_for_children(children, state.cmd_path, context) end
 			imgui.same_line()
 		end
+		local changed
 		changed, state.cmd_path = imgui.input_text("Modify CMD File" .. (cmd_exists and "" or " (Does Not Exist)") .. "##" .. key, state.cmd_path)
+	end
+end
+
+local function draw_child_material_controls(child, context, player_name)
+	local runtime = context.runtime
+	local imgui = runtime.imgui
+	local player_state = get_player_material_state(context, player_name, context.active_sf6_player_owner)
+	local child_state_key = child.xform or child.mesh or child
+	local state = player_state.children[child_state_key] or {}
+	player_state.children[child_state_key] = state
+	local key = player_name .. "::" .. tostring(child_state_key)
+	local target_name = child.name or tostring(child_state_key)
+
+	if RN and RN.mesh_resource_names and RN.mdf2_resource_names then
+		state.mesh_idx = state.mesh_idx or (child.mpaths and runtime.EMV.find_index(RN.mesh_resource_names, child.mpaths.mesh_path)) or 1
+		local changed
+		changed, state.mesh_idx = imgui.combo("Change Mesh " .. target_name .. "##" .. key, state.mesh_idx, RN.mesh_resource_names)
+		if changed then
+			set_mesh_for_children({child}, RN.mesh_resource_names[state.mesh_idx], context)
+			state.mdf_idx = child.mpaths and runtime.EMV.find_index(RN.mdf2_resource_names, child.mpaths.mdf2_path) or state.mdf_idx
+			state.mdf_path = default_mdf_path(child, context)
+		end
+
+		state.mdf_idx = state.mdf_idx or (child.mpaths and runtime.EMV.find_index(RN.mdf2_resource_names, child.mpaths.mdf2_path)) or 1
+		changed, state.mdf_idx = imgui.combo("Change Materials " .. target_name .. "##" .. key, state.mdf_idx, RN.mdf2_resource_names)
+		if changed then
+			set_materials_for_children({child}, RN.mdf2_resource_names[state.mdf_idx], context)
+			state.mdf_path = default_mdf_path(child, context)
+		end
+	end
+
+	if _G.RE_Resource and BitStream and child.materials then
+		state.mdf_path = state.mdf_path or default_mdf_path(child, context)
+		local mdf_exists = state.mdf_path ~= "" and BitStream.checkFileExists(state.mdf_path:gsub("^reframework/data/", ""))
+		if mdf_exists then
+			if imgui.button("Save MDF##" .. key) then save_mdf_for_children({child}, state.mdf_path, context) end
+			imgui.same_line()
+		end
+		local changed
+		changed, state.mdf_path = imgui.input_text("Modify MDF File" .. (mdf_exists and "" or " (Does Not Exist)") .. "##" .. key, state.mdf_path)
 	end
 end
 
@@ -226,7 +253,9 @@ local function draw_player(context, player_index, player_name, draw_materials)
 					children[#children + 1] = child
 				end
 			end
-			draw_player_material_controls(children, context, player_name)
+			draw_player_material_controls(children, context, player_name, player_xform)
+			context.active_sf6_player_name = player_name
+			context.active_sf6_player_owner = player_xform
 			for _, child in ipairs(children) do
 				if child then
 					context.active_sf6_material_child = child
@@ -234,6 +263,8 @@ local function draw_player(context, player_index, player_name, draw_materials)
 				end
 			end
 			context.active_sf6_material_child = nil
+			context.active_sf6_player_name = nil
+			context.active_sf6_player_owner = nil
 		end
 		runtime.imgui.end_rect(2)
 		runtime.imgui.tree_pop()
@@ -255,6 +286,7 @@ local function draw_materials(context)
 
 	local imgui = context.runtime.imgui
 	if imgui.tree_node_ptr_id(child.mesh or child.xform, child.name or "Object") then
+		draw_child_material_controls(child, context, context.active_sf6_player_name)
 		for _, material in ipairs(child.materials) do
 			material:draw_imgui_mat()
 		end
